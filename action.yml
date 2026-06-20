@@ -7,7 +7,7 @@ branding:
 
 inputs:
   paths:
-    description: 'Files or directories to lint (space- or newline-separated). Empty = discover every SKILL.md.'
+    description: 'Files or directories to lint (comma- or newline-separated). Empty = discover every SKILL.md.'
     required: false
     default: ''
   preset:

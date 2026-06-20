@@ -7,6 +7,28 @@ import { asString } from '../util.js';
 const PERSON_MARKERS =
   /\b(i'?m|i'?ll|i'?ve|i can|i will|you'?ll|you'?re|you can|you should|let'?s|let me|use me)\b/i;
 const BARE_PRONOUNS = /\b(i|we|our|us|my|me|your|you)\b/i;
+const SENTENCE_INITIAL_PRONOUN = /^(I|We|Our|Us|My|Me|Your|You)$/;
+
+/**
+ * Detect a genuine first/second-person pronoun while ignoring acronyms that
+ * collide with one (US, ME, I/O, …). A bare pronoun counts only when it is
+ * all-lowercase ("helps you …") or a sentence-initial, canonically-capitalized
+ * word followed by whitespace ("We generate …") — never a mid-sentence
+ * uppercase token.
+ */
+function findPersonMarker(desc: string): string | null {
+  const marker = PERSON_MARKERS.exec(desc);
+  if (marker) return marker[0];
+  const bare = BARE_PRONOUNS.exec(desc);
+  if (!bare) return null;
+  if (bare[0] === bare[0].toLowerCase()) return bare[0];
+  const after = desc[bare.index + bare[0].length];
+  const sentenceInitial =
+    bare.index === 0 &&
+    SENTENCE_INITIAL_PRONOUN.test(bare[0]) &&
+    (after === undefined || /\s/.test(after));
+  return sentenceInitial ? bare[0] : null;
+}
 
 /** Cues that the description says *when* to use the skill, not only what it does. */
 const TRIGGER_CUES =
@@ -90,10 +112,10 @@ export const descriptionRules: Rule[] = [
       if (doc.data == null) return;
       const desc = asString(doc.data['description']);
       if (desc === null) return;
-      const m = PERSON_MARKERS.exec(desc) ?? BARE_PRONOUNS.exec(desc);
-      if (m) {
+      const marker = findPersonMarker(desc);
+      if (marker) {
         report(
-          `\`description\` reads as first/second person ("${m[0]}"). Write it in the third person, e.g. "Extracts …. Use when the user …".`,
+          `\`description\` reads as first/second person ("${marker}"). Write it in the third person, e.g. "Extracts …. Use when the user …".`,
           { line: doc.keyLines['description'] },
         );
       }

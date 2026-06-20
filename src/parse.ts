@@ -78,8 +78,13 @@ export function parseSkill(file: string, rawInput: string): SkillDoc {
   doc.body = body;
   doc.bodyStartLine = lineAt(raw, bodyOffset);
 
-  // Parse the YAML. We parse the frontmatter substring on its own, then map
-  // offsets back to file lines so reports land on the right line.
+  // The YAML parser indexes `frontmatterRaw` (CRLF-normalized), so its offsets
+  // must be counted within that same string, then shifted by the number of
+  // lines the opening fence consumed. Counting them against `raw` would drift
+  // by one line for every CRLF the normalization removed.
+  const fmBaseLine = raw.slice(0, fmStart).match(/\n/g)?.length ?? 0;
+  const fileLine = (offset: number): number => fmBaseLine + lineAt(frontmatterRaw, offset);
+
   const parsed = parseDocument(frontmatterRaw, { prettyErrors: false });
 
   if (parsed.errors.length > 0) {
@@ -87,31 +92,39 @@ export function parseSkill(file: string, rawInput: string): SkillDoc {
     const relOffset = err.pos?.[0] ?? 0;
     doc.yamlError = {
       message: err.message.replace(/\s+at line \d+.*$/s, ''),
-      line: lineAt(raw, fmStart + relOffset),
+      line: fileLine(relOffset),
     };
     return doc;
   }
 
   const contents = parsed.contents;
+  if (contents == null) {
+    // Empty or comment-only frontmatter: well-formed YAML with no keys. Leave
+    // data as {} (not null) so the name-required / description-required rules
+    // still fire with their precise messages.
+    doc.data = {};
+    return doc;
+  }
   if (!isMap(contents)) {
     // e.g. frontmatter is a scalar or a list, not a mapping of keys.
     doc.data = {};
     doc.yamlError = {
       message: 'frontmatter must be a YAML mapping of key: value pairs',
-      line: lineAt(raw, fmStart),
+      line: fmBaseLine + 1,
     };
     return doc;
   }
 
   const data: Record<string, unknown> = {};
+  const asJs = parsed.toJS({ maxAliasCount: 100 }) as Record<string, unknown> | null;
   for (const item of contents.items) {
     const keyNode = item.key;
     if (!isScalar(keyNode)) continue;
     const key = String(keyNode.value);
-    data[key] = parsed.toJS({ maxAliasCount: 100 })?.[key];
+    data[key] = asJs?.[key];
     const start = keyNode.range?.[0];
     if (typeof start === 'number') {
-      doc.keyLines[key] = lineAt(raw, fmStart + start);
+      doc.keyLines[key] = fileLine(start);
     }
   }
   doc.data = data;

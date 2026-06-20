@@ -1,15 +1,25 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig([
-  // Library + CLI: `yaml` stays an external dependency (installed from npm).
+  // Library: dual ESM + CJS so both `import` and `require` consumers work.
+  // `yaml` stays an external dependency (installed from npm).
   {
-    entry: {
-      index: 'src/index.ts',
-      cli: 'src/cli.ts',
-    },
+    entry: { index: 'src/index.ts' },
     format: ['esm', 'cjs'],
-    dts: { entry: { index: 'src/index.ts' } },
+    dts: true,
     clean: true,
+    sourcemap: false,
+    target: 'node18',
+    splitting: false,
+    shims: true,
+  },
+  // CLI: ESM only. The `bin` points at dist/cli.js (which keeps the shebang),
+  // so a CJS copy would just be dead weight in the published tarball.
+  {
+    entry: { cli: 'src/cli.ts' },
+    format: ['esm'],
+    dts: false,
+    clean: false,
     sourcemap: false,
     target: 'node18',
     splitting: false,

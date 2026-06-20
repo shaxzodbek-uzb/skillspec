@@ -35,31 +35,36 @@ export const keyRules: Rule[] = [
       const ok =
         typeof value === 'string' ||
         (Array.isArray(value) && value.every((v) => typeof v === 'string'));
+      const line = doc.keyLines['allowed-tools'];
       if (!ok) {
         report(
           '`allowed-tools` should be a space-separated string (e.g. "Bash(git:*) Read") or a YAML list of strings.',
-          { line: doc.keyLines['allowed-tools'] },
+          { line },
         );
       } else if (typeof value === 'string' && value.trim() === '') {
-        report('`allowed-tools` is empty; remove it or list the tools to pre-approve.', {
-          line: doc.keyLines['allowed-tools'],
-        });
+        report('`allowed-tools` is empty; remove it or list the tools to pre-approve.', { line });
+      } else if (typeof value === 'string' && value.includes(',')) {
+        report(
+          '`allowed-tools` looks comma-separated; tools must be space-separated (e.g. "Bash(git:*) Read"). Commas become part of the tool name.',
+          { line },
+        );
       }
     },
   },
   {
     id: 'compatibility-length',
-    description: '`compatibility` must be at most 500 characters.',
+    description: '`compatibility` must be within the spec character limit.',
     defaultSeverity: 'warning',
-    check(doc, _options, report) {
+    check(doc, options, report) {
       if (doc.data == null) return;
       const value = doc.data['compatibility'];
       if (typeof value !== 'string') return;
       const len = charLength(value);
-      if (len > 500) {
-        report(`\`compatibility\` is ${len} characters; the maximum is 500.`, {
-          line: doc.keyLines['compatibility'],
-        });
+      if (len > options.compatibilityMaxLength) {
+        report(
+          `\`compatibility\` is ${len} characters; the maximum is ${options.compatibilityMaxLength}.`,
+          { line: doc.keyLines['compatibility'] },
+        );
       }
     },
   },
@@ -78,9 +83,10 @@ export const keyRules: Rule[] = [
         return;
       }
       for (const [k, v] of Object.entries(value)) {
-        if (v !== null && typeof v === 'object') {
+        if (typeof v !== 'string') {
+          const got = v === null ? 'null' : Array.isArray(v) ? 'list' : typeof v;
           report(
-            `\`metadata.${k}\` should be a simple string value; nested objects/lists are not part of the spec.`,
+            `\`metadata.${k}\` must be a string value (got ${got}); the spec defines metadata as a string-valued mapping. Quote it, e.g. version: "1.0".`,
             { line: doc.keyLines['metadata'] },
           );
         }

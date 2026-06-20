@@ -18,7 +18,10 @@ export function reportGithub(result: LintResult): string {
   return result.findings
     .map((f) => {
       const command = f.severity === 'error' ? 'error' : 'warning';
-      const props = [`title=skillspec/${f.ruleId}`, `file=${escapeProperty(f.file)}`];
+      const props = [
+        `title=${escapeProperty(`skillspec/${f.ruleId}`)}`,
+        `file=${escapeProperty(f.file)}`,
+      ];
       if (f.line) props.push(`line=${f.line}`);
       if (f.column) props.push(`col=${f.column}`);
       return `::${command} ${props.join(',')}::${escapeData(f.message)}`;

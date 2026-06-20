@@ -31,7 +31,7 @@ skills/pdf-tools/SKILL.md
 ✖ 4 problems (2 errors, 2 warnings) across 1 skill
 ```
 
-Exit code `0` when clean, `1` when problems are found — ready for a pre‑commit hook or CI gate.
+Exit code `0` when clean, `1` when problems are found, `2` on a usage error — ready for a pre‑commit hook or CI gate.
 
 ---
 

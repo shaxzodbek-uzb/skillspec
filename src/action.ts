@@ -45,8 +45,10 @@ function appendTo(envVar: string, content: string): void {
 }
 
 function run(): void {
+  // Split on newlines/commas only (not spaces) so directory paths containing
+  // spaces survive intact.
   const paths = getInput('paths')
-    .split(/[\n,\s]+/)
+    .split(/[\n,]+/)
     .map((s) => s.trim())
     .filter(Boolean);
 
@@ -78,9 +80,11 @@ function run(): void {
   );
 
   if (result.errorCount > 0 || overWarnings) {
-    process.stdout.write(
-      `::error title=skillspec::Found ${result.errorCount} error(s) and ${result.warningCount} warning(s)\n`,
-    );
+    const reason =
+      result.errorCount === 0
+        ? `Failing on ${result.warningCount} warning(s) (warning gate exceeded)`
+        : `Found ${result.errorCount} error(s) and ${result.warningCount} warning(s)`;
+    process.stdout.write(`::error title=skillspec::${reason}\n`);
     process.exitCode = 1;
   }
 }

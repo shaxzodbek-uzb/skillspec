@@ -100,34 +100,41 @@ function parseSkill(file, rawInput) {
   doc.frontmatterRaw = frontmatterRaw;
   doc.body = body;
   doc.bodyStartLine = lineAt(raw, bodyOffset);
+  const fmBaseLine = raw.slice(0, fmStart).match(/\n/g)?.length ?? 0;
+  const fileLine = (offset) => fmBaseLine + lineAt(frontmatterRaw, offset);
   const parsed = parseDocument(frontmatterRaw, { prettyErrors: false });
   if (parsed.errors.length > 0) {
     const err = parsed.errors[0];
     const relOffset = err.pos?.[0] ?? 0;
     doc.yamlError = {
       message: err.message.replace(/\s+at line \d+.*$/s, ""),
-      line: lineAt(raw, fmStart + relOffset)
+      line: fileLine(relOffset)
     };
     return doc;
   }
   const contents = parsed.contents;
+  if (contents == null) {
+    doc.data = {};
+    return doc;
+  }
   if (!isMap(contents)) {
     doc.data = {};
     doc.yamlError = {
       message: "frontmatter must be a YAML mapping of key: value pairs",
-      line: lineAt(raw, fmStart)
+      line: fmBaseLine + 1
     };
     return doc;
   }
   const data = {};
+  const asJs = parsed.toJS({ maxAliasCount: 100 });
   for (const item of contents.items) {
     const keyNode = item.key;
     if (!isScalar(keyNode)) continue;
     const key = String(keyNode.value);
-    data[key] = parsed.toJS({ maxAliasCount: 100 })?.[key];
+    data[key] = asJs?.[key];
     const start = keyNode.range?.[0];
     if (typeof start === "number") {
-      doc.keyLines[key] = lineAt(raw, fmStart + start);
+      doc.keyLines[key] = fileLine(start);
     }
   }
   doc.data = data;
@@ -411,6 +418,17 @@ var nameRules = [
 // src/rules/description.ts
 var PERSON_MARKERS = /\b(i'?m|i'?ll|i'?ve|i can|i will|you'?ll|you'?re|you can|you should|let'?s|let me|use me)\b/i;
 var BARE_PRONOUNS = /\b(i|we|our|us|my|me|your|you)\b/i;
+var SENTENCE_INITIAL_PRONOUN = /^(I|We|Our|Us|My|Me|Your|You)$/;
+function findPersonMarker(desc) {
+  const marker = PERSON_MARKERS.exec(desc);
+  if (marker) return marker[0];
+  const bare = BARE_PRONOUNS.exec(desc);
+  if (!bare) return null;
+  if (bare[0] === bare[0].toLowerCase()) return bare[0];
+  const after = desc[bare.index + bare[0].length];
+  const sentenceInitial = bare.index === 0 && SENTENCE_INITIAL_PRONOUN.test(bare[0]) && (after === void 0 || /\s/.test(after));
+  return sentenceInitial ? bare[0] : null;
+}
 var TRIGGER_CUES = /\b(use (this|when|it|for)|when |whenever|trigger|triggers|if the user|for (creating|editing|reading|working|building|generating|analy|converting|processing|handling)|ideal for|helpful when|applies when|invoke|activate)\b/i;
 var descriptionRules = [
   {
@@ -488,10 +506,10 @@ var descriptionRules = [
       if (doc.data == null) return;
       const desc = asString(doc.data["description"]);
       if (desc === null) return;
-      const m = PERSON_MARKERS.exec(desc) ?? BARE_PRONOUNS.exec(desc);
-      if (m) {
+      const marker = findPersonMarker(desc);
+      if (marker) {
         report(
-          `\`description\` reads as first/second person ("${m[0]}"). Write it in the third person, e.g. "Extracts \u2026. Use when the user \u2026".`,
+          `\`description\` reads as first/second person ("${marker}"). Write it in the third person, e.g. "Extracts \u2026. Use when the user \u2026".`,
           { line: doc.keyLines["description"] }
         );
       }
@@ -590,31 +608,36 @@ var keyRules = [
       if (!("allowed-tools" in doc.data)) return;
       const value = doc.data["allowed-tools"];
       const ok = typeof value === "string" || Array.isArray(value) && value.every((v) => typeof v === "string");
+      const line = doc.keyLines["allowed-tools"];
       if (!ok) {
         report(
           '`allowed-tools` should be a space-separated string (e.g. "Bash(git:*) Read") or a YAML list of strings.',
-          { line: doc.keyLines["allowed-tools"] }
+          { line }
         );
       } else if (typeof value === "string" && value.trim() === "") {
-        report("`allowed-tools` is empty; remove it or list the tools to pre-approve.", {
-          line: doc.keyLines["allowed-tools"]
-        });
+        report("`allowed-tools` is empty; remove it or list the tools to pre-approve.", { line });
+      } else if (typeof value === "string" && value.includes(",")) {
+        report(
+          '`allowed-tools` looks comma-separated; tools must be space-separated (e.g. "Bash(git:*) Read"). Commas become part of the tool name.',
+          { line }
+        );
       }
     }
   },
   {
     id: "compatibility-length",
-    description: "`compatibility` must be at most 500 characters.",
+    description: "`compatibility` must be within the spec character limit.",
     defaultSeverity: "warning",
-    check(doc, _options, report) {
+    check(doc, options, report) {
       if (doc.data == null) return;
       const value = doc.data["compatibility"];
       if (typeof value !== "string") return;
       const len = charLength(value);
-      if (len > 500) {
-        report(`\`compatibility\` is ${len} characters; the maximum is 500.`, {
-          line: doc.keyLines["compatibility"]
-        });
+      if (len > options.compatibilityMaxLength) {
+        report(
+          `\`compatibility\` is ${len} characters; the maximum is ${options.compatibilityMaxLength}.`,
+          { line: doc.keyLines["compatibility"] }
+        );
       }
     }
   },
@@ -633,9 +656,10 @@ var keyRules = [
         return;
       }
       for (const [k, v] of Object.entries(value)) {
-        if (v !== null && typeof v === "object") {
+        if (typeof v !== "string") {
+          const got = v === null ? "null" : Array.isArray(v) ? "list" : typeof v;
           report(
-            `\`metadata.${k}\` should be a simple string value; nested objects/lists are not part of the spec.`,
+            `\`metadata.${k}\` must be a string value (got ${got}); the spec defines metadata as a string-valued mapping. Quote it, e.g. version: "1.0".`,
             { line: doc.keyLines["metadata"] }
           );
         }
@@ -762,6 +786,7 @@ function resolveOptions(input = {}) {
     nameMaxLength: input.nameMaxLength ?? LIMITS.nameMaxLength,
     descriptionMaxLength: input.descriptionMaxLength ?? LIMITS.descriptionMaxLength,
     descriptionMinLength: input.descriptionMinLength ?? 20,
+    compatibilityMaxLength: input.compatibilityMaxLength ?? LIMITS.compatibilityMaxLength,
     bodyMaxLines: input.bodyMaxLines ?? LIMITS.bodyMaxLines,
     bodyTokenBudget: input.bodyTokenBudget ?? LIMITS.bodyTokenBudget,
     knownKeys: [...presetCfg.knownKeys, ...input.knownKeys ?? []],
@@ -978,12 +1003,14 @@ function reportPretty(result, options = {}) {
   const lines = [];
   for (const [file, group] of groupByFile(findings)) {
     lines.push(c.underline(c.bold(file)));
-    const locWidth = Math.max(...group.map((f) => `${f.line ?? ""}:${f.column ?? ""}`.length), 4);
-    for (const f of group) {
-      const loc = f.line ? `${f.line}:${f.column ?? 1}` : "";
+    const locs = group.map((f) => f.line ? `${f.line}:${f.column ?? 1}` : "");
+    const locWidth = Math.max(...locs.map((s) => s.length), 4);
+    group.forEach((f, idx) => {
       const sev = f.severity === "error" ? c.red("error  ") : c.yellow("warning");
-      lines.push(`  ${c.dim(loc.padEnd(locWidth))}  ${sev}  ${f.message}  ${c.dim(f.ruleId)}`);
-    }
+      lines.push(
+        `  ${c.dim(locs[idx].padEnd(locWidth))}  ${sev}  ${f.message}  ${c.dim(f.ruleId)}`
+      );
+    });
     lines.push("");
   }
   const parts = [];
@@ -1027,7 +1054,10 @@ function escapeProperty(value) {
 function reportGithub(result) {
   return result.findings.map((f) => {
     const command = f.severity === "error" ? "error" : "warning";
-    const props = [`title=skillspec/${f.ruleId}`, `file=${escapeProperty(f.file)}`];
+    const props = [
+      `title=${escapeProperty(`skillspec/${f.ruleId}`)}`,
+      `file=${escapeProperty(f.file)}`
+    ];
     if (f.line) props.push(`line=${f.line}`);
     if (f.column) props.push(`col=${f.column}`);
     return `::${command} ${props.join(",")}::${escapeData(f.message)}`;
@@ -1051,8 +1081,10 @@ function reportSarif(result) {
   });
   const results = result.findings.map((f) => {
     const region = {};
-    if (f.line) region.startLine = f.line;
-    if (f.column) region.startColumn = f.column;
+    if (f.line) {
+      region.startLine = f.line;
+      if (f.column) region.startColumn = f.column;
+    }
     const base = {
       ruleId: f.ruleId,
       level: f.severity === "error" ? "error" : "warning",
@@ -1117,7 +1149,8 @@ Usage:
 
 Arguments:
   paths                 Files or directories to lint. Default: discover SKILL.md
-                        files under the current directory.
+                        files under the current directory. Use -- before paths
+                        that start with a dash.
 
 Options:
   -f, --format <fmt>    Output format: ${FORMATS.join(", ")} (default: pretty,
@@ -1156,13 +1189,21 @@ function parseArgs(argv) {
     showVersion: false,
     listRules: false
   };
-  const next = (i, flag) => {
-    const value = argv[i + 1];
-    if (value === void 0) fail(`missing value for ${flag}`);
-    return value;
-  };
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
+    let arg = argv[i];
+    let inlineValue;
+    if (arg.startsWith("--") && arg.includes("=")) {
+      const eq = arg.indexOf("=");
+      inlineValue = arg.slice(eq + 1);
+      arg = arg.slice(0, eq);
+    }
+    const take = (flag) => {
+      if (inlineValue !== void 0) return inlineValue;
+      const value = argv[i + 1];
+      if (value === void 0) fail(`missing value for ${flag}`);
+      i++;
+      return value;
+    };
     switch (arg) {
       case "-h":
       case "--help":
@@ -1178,19 +1219,19 @@ function parseArgs(argv) {
         break;
       case "-f":
       case "--format": {
-        const value = next(i++, arg);
+        const value = take(arg);
         if (!FORMATS.includes(value)) fail(`unknown format "${value}"`);
         args.format = value;
         break;
       }
       case "--preset": {
-        const value = next(i++, arg);
+        const value = take(arg);
         if (value !== "claude-code" && value !== "standard") fail(`unknown preset "${value}"`);
         args.preset = value;
         break;
       }
       case "--config":
-        args.config = next(i++, arg);
+        args.config = take(arg);
         break;
       case "--fix":
         args.fix = true;
@@ -1205,19 +1246,22 @@ function parseArgs(argv) {
         args.color = false;
         break;
       case "--max-warnings": {
-        const value = Number(next(i++, arg));
+        const value = Number(take(arg));
         if (!Number.isFinite(value)) fail("--max-warnings expects a number");
         args.maxWarnings = value;
         break;
       }
       case "--rule": {
-        const value = next(i++, arg);
+        const value = take(arg);
         const idx = value.lastIndexOf(":");
         if (idx <= 0) fail(`--rule expects <id:severity>, got "${value}"`);
         const id = value.slice(0, idx);
         args.ruleOverrides[id] = normalizeSeverity(value.slice(idx + 1));
         break;
       }
+      case "--":
+        for (i++; i < argv.length; i++) args.paths.push(argv[i]);
+        break;
       default:
         if (arg.startsWith("-")) fail(`unknown option "${arg}"`);
         args.paths.push(arg);
@@ -1300,6 +1344,7 @@ function main() {
     }
   }
   let result = lintFiles(args.paths, options);
+  const realWarningCount = result.warningCount;
   if (args.quiet) {
     const findings = result.findings.filter((f) => f.severity === "error");
     result = { ...result, findings, warningCount: 0 };
@@ -1308,7 +1353,7 @@ function main() {
   const output = formatResult(format, result, { color });
   if (output) process2.stdout.write(`${output}
 `);
-  const overWarnings = args.maxWarnings >= 0 && result.warningCount > args.maxWarnings;
+  const overWarnings = args.maxWarnings >= 0 && realWarningCount > args.maxWarnings;
   process2.exit(result.errorCount > 0 || overWarnings ? 1 : 0);
 }
 main();

@@ -40,12 +40,15 @@ export function reportPretty(result: LintResult, options: PrettyOptions = {}): s
   const lines: string[] = [];
   for (const [file, group] of groupByFile(findings)) {
     lines.push(c.underline(c.bold(file)));
-    const locWidth = Math.max(...group.map((f) => `${f.line ?? ''}:${f.column ?? ''}`.length), 4);
-    for (const f of group) {
-      const loc = f.line ? `${f.line}:${f.column ?? 1}` : '';
+    // Measure and render with the exact same loc strings so the column stays aligned.
+    const locs = group.map((f) => (f.line ? `${f.line}:${f.column ?? 1}` : ''));
+    const locWidth = Math.max(...locs.map((s) => s.length), 4);
+    group.forEach((f, idx) => {
       const sev = f.severity === 'error' ? c.red('error  ') : c.yellow('warning');
-      lines.push(`  ${c.dim(loc.padEnd(locWidth))}  ${sev}  ${f.message}  ${c.dim(f.ruleId)}`);
-    }
+      lines.push(
+        `  ${c.dim(locs[idx]!.padEnd(locWidth))}  ${sev}  ${f.message}  ${c.dim(f.ruleId)}`,
+      );
+    });
     lines.push('');
   }
 

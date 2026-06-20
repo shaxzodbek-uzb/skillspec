@@ -106,6 +106,8 @@ export interface Options {
   descriptionMaxLength?: number;
   /** Below this, `description` is flagged as too thin to trigger on. Default 20. */
   descriptionMinLength?: number;
+  /** Max characters allowed in `compatibility`. Default 500. */
+  compatibilityMaxLength?: number;
   /** Soft cap on SKILL.md body lines before suggesting progressive disclosure. Default 500. */
   bodyMaxLines?: number;
   /** Approximate token budget for the SKILL.md body. Default 5000. */
@@ -122,6 +124,7 @@ export interface ResolvedOptions {
   nameMaxLength: number;
   descriptionMaxLength: number;
   descriptionMinLength: number;
+  compatibilityMaxLength: number;
   bodyMaxLines: number;
   bodyTokenBudget: number;
   knownKeys: string[];

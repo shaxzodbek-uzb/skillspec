@@ -40,7 +40,8 @@ Usage:
 
 Arguments:
   paths                 Files or directories to lint. Default: discover SKILL.md
-                        files under the current directory.
+                        files under the current directory. Use -- before paths
+                        that start with a dash.
 
 Options:
   -f, --format <fmt>    Output format: ${FORMATS.join(', ')} (default: pretty,
@@ -82,14 +83,22 @@ function parseArgs(argv: string[]): CliArgs {
     listRules: false,
   };
 
-  const next = (i: number, flag: string): string => {
-    const value = argv[i + 1];
-    if (value === undefined) fail(`missing value for ${flag}`);
-    return value;
-  };
-
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]!;
+    let arg = argv[i]!;
+    let inlineValue: string | undefined;
+    if (arg.startsWith('--') && arg.includes('=')) {
+      const eq = arg.indexOf('=');
+      inlineValue = arg.slice(eq + 1);
+      arg = arg.slice(0, eq);
+    }
+    // Read this flag's value: prefer an inline `=value`, else the next token.
+    const take = (flag: string): string => {
+      if (inlineValue !== undefined) return inlineValue;
+      const value = argv[i + 1];
+      if (value === undefined) fail(`missing value for ${flag}`);
+      i++;
+      return value;
+    };
     switch (arg) {
       case '-h':
       case '--help':
@@ -105,19 +114,19 @@ function parseArgs(argv: string[]): CliArgs {
         break;
       case '-f':
       case '--format': {
-        const value = next(i++, arg);
+        const value = take(arg);
         if (!FORMATS.includes(value as Format)) fail(`unknown format "${value}"`);
         args.format = value as Format;
         break;
       }
       case '--preset': {
-        const value = next(i++, arg);
+        const value = take(arg);
         if (value !== 'claude-code' && value !== 'standard') fail(`unknown preset "${value}"`);
         args.preset = value;
         break;
       }
       case '--config':
-        args.config = next(i++, arg);
+        args.config = take(arg);
         break;
       case '--fix':
         args.fix = true;
@@ -132,19 +141,23 @@ function parseArgs(argv: string[]): CliArgs {
         args.color = false;
         break;
       case '--max-warnings': {
-        const value = Number(next(i++, arg));
+        const value = Number(take(arg));
         if (!Number.isFinite(value)) fail('--max-warnings expects a number');
         args.maxWarnings = value;
         break;
       }
       case '--rule': {
-        const value = next(i++, arg);
+        const value = take(arg);
         const idx = value.lastIndexOf(':');
         if (idx <= 0) fail(`--rule expects <id:severity>, got "${value}"`);
         const id = value.slice(0, idx);
         args.ruleOverrides[id] = normalizeSeverity(value.slice(idx + 1));
         break;
       }
+      case '--':
+        // End of options: everything after is a path (even if dash-prefixed).
+        for (i++; i < argv.length; i++) args.paths.push(argv[i]!);
+        break;
       default:
         if (arg.startsWith('-')) fail(`unknown option "${arg}"`);
         args.paths.push(arg);
@@ -229,6 +242,9 @@ function main(): void {
   }
 
   let result = lintFiles(args.paths, options);
+  // The warning gate uses the real count, independent of the --quiet display
+  // filter, so `--quiet --max-warnings 0` can't silently pass in CI.
+  const realWarningCount = result.warningCount;
   if (args.quiet) {
     const findings = result.findings.filter((f) => f.severity === 'error');
     result = { ...result, findings, warningCount: 0 };
@@ -239,7 +255,7 @@ function main(): void {
   const output = formatResult(format, result, { color });
   if (output) process.stdout.write(`${output}\n`);
 
-  const overWarnings = args.maxWarnings >= 0 && result.warningCount > args.maxWarnings;
+  const overWarnings = args.maxWarnings >= 0 && realWarningCount > args.maxWarnings;
   process.exit(result.errorCount > 0 || overWarnings ? 1 : 0);
 }
 

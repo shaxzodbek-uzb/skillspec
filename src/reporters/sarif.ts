@@ -23,9 +23,13 @@ export function reportSarif(result: LintResult): string {
   });
 
   const results = result.findings.map((f) => {
+    // startColumn is only meaningful alongside startLine in SARIF, so gate it
+    // inside the line check (a column without a line is dropped).
     const region: Record<string, number> = {};
-    if (f.line) region.startLine = f.line;
-    if (f.column) region.startColumn = f.column;
+    if (f.line) {
+      region.startLine = f.line;
+      if (f.column) region.startColumn = f.column;
+    }
     const base = {
       ruleId: f.ruleId,
       level: f.severity === 'error' ? 'error' : 'warning',

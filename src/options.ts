@@ -48,6 +48,7 @@ export function resolveOptions(input: ResolveInput = {}): ResolvedOptions {
     nameMaxLength: input.nameMaxLength ?? LIMITS.nameMaxLength,
     descriptionMaxLength: input.descriptionMaxLength ?? LIMITS.descriptionMaxLength,
     descriptionMinLength: input.descriptionMinLength ?? 20,
+    compatibilityMaxLength: input.compatibilityMaxLength ?? LIMITS.compatibilityMaxLength,
     bodyMaxLines: input.bodyMaxLines ?? LIMITS.bodyMaxLines,
     bodyTokenBudget: input.bodyTokenBudget ?? LIMITS.bodyTokenBudget,
     knownKeys: [...presetCfg.knownKeys, ...(input.knownKeys ?? [])],
