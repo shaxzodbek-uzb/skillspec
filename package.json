@@ -1,0 +1,83 @@
+{
+  "name": "skillspec",
+  "version": "0.1.0",
+  "description": "Lint Claude Agent SKILL.md files against Anthropic's exact spec — frontmatter, naming, description trigger-quality, and token budgets — in your editor, on the CLI, and in CI. Zero-config.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "agent-skills",
+    "agentskills",
+    "skill",
+    "skills",
+    "skill.md",
+    "linter",
+    "lint",
+    "validator",
+    "anthropic",
+    "frontmatter",
+    "mcp",
+    "github-action"
+  ],
+  "homepage": "https://github.com/shaxzodbek-uzb/skillspec#readme",
+  "bugs": {
+    "url": "https://github.com/shaxzodbek-uzb/skillspec/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shaxzodbek-uzb/skillspec.git"
+  },
+  "license": "MIT",
+  "author": "Shaxzodbek Sobirov <shaxzodbek@blaze.uz> (https://blaze.uz)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "skillspec": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "action.yml",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "self": "node ./dist/cli.js examples",
+    "prepublishOnly": "npm run build",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "prettier": "^3.3.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

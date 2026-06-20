@@ -1,0 +1,40 @@
+name: skillspec
+description: "Lint Claude Agent SKILL.md files against Anthropic's exact spec — frontmatter, naming, description trigger-quality and token budgets."
+author: Shaxzodbek Sobirov / Blaze
+branding:
+  icon: check-circle
+  color: orange
+
+inputs:
+  paths:
+    description: 'Files or directories to lint (space- or newline-separated). Empty = discover every SKILL.md.'
+    required: false
+    default: ''
+  preset:
+    description: 'Spec preset: claude-code (default) or standard.'
+    required: false
+    default: ''
+  rules:
+    description: 'Rule severity overrides, comma- or newline-separated, e.g. "name-format:off, body-max-lines:error".'
+    required: false
+    default: ''
+  max-warnings:
+    description: 'Fail if the warning count exceeds this number. -1 disables the check (default).'
+    required: false
+    default: '-1'
+  fail-on-warnings:
+    description: 'Fail the run on any warning (shorthand for max-warnings: 0).'
+    required: false
+    default: 'false'
+
+outputs:
+  error-count:
+    description: 'Number of errors found.'
+  warning-count:
+    description: 'Number of warnings found.'
+  file-count:
+    description: 'Number of skills checked.'
+
+runs:
+  using: node20
+  main: dist/action.cjs

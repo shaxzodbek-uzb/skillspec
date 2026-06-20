@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# test / coverage output
+coverage/
+*.log
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# NOTE: dist/ is intentionally committed.
+# This repo ships a native node20 GitHub Action that runs the bundled
+# files straight from the checked-out repo, so dist/ must be tracked.
+# CI verifies it stays in sync with src/ (see .github/workflows/ci.yml).
