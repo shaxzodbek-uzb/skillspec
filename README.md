@@ -101,7 +101,7 @@ jobs:
 
 | Input              | Default       | Description                                                             |
 | ------------------ | ------------- | ----------------------------------------------------------------------- |
-| `paths`            | `''`          | Files/dirs to lint (space‑ or newline‑separated). Empty = discover all. |
+| `paths`            | `''`          | Files/dirs to lint (comma‑ or newline‑separated). Empty = discover all. |
 | `preset`           | `claude-code` | `claude-code` or `standard`.                                            |
 | `rules`            | `''`          | Severity overrides, e.g. `name-format:off, body-max-lines:error`.       |
 | `max-warnings`     | `-1`          | Fail if warnings exceed this number.                                    |
