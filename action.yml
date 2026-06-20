@@ -1,6 +1,6 @@
 name: skillspec
 description: "Lint Claude Agent SKILL.md files against Anthropic's exact spec — frontmatter, naming, description trigger-quality and token budgets."
-author: Shaxzodbek Sobirov / Blaze
+author: Shaxzodbek Qambaraliyev / Blaze
 branding:
   icon: check-circle
   color: orange

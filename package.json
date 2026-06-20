@@ -27,7 +27,7 @@
     "url": "git+https://github.com/shaxzodbek-uzb/skillspec.git"
   },
   "license": "MIT",
-  "author": "Shaxzodbek Sobirov <shaxzodbek@blaze.uz> (https://blaze.uz)",
+  "author": "Shaxzodbek Qambaraliyev <shaxzodbek@blaze.uz> (https://blaze.uz)",
   "type": "module",
   "exports": {
     ".": {

@@ -186,4 +186,4 @@ Issues and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The spec live
 
 ## License
 
-[MIT](LICENSE) © 2026 Shaxzodbek Sobirov / Blaze
+[MIT](LICENSE) © 2026 Shaxzodbek Qambaraliyev / Blaze
