@@ -3,7 +3,6 @@
 > Lint your Claude Agent **`SKILL.md`** files against Anthropic's _exact_ spec — frontmatter, naming, description trigger‑quality, and token budgets — in your editor, on the CLI, and in CI.
 
 [![npm](https://img.shields.io/npm/v/skillspec.svg)](https://www.npmjs.com/package/skillspec)
-[![CI](https://github.com/shaxzodbek-uzb/skillspec/actions/workflows/ci.yml/badge.svg)](https://github.com/shaxzodbek-uzb/skillspec/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/skillspec.svg)](LICENSE)
 [![node](https://img.shields.io/node/v/skillspec.svg)](package.json)
 
