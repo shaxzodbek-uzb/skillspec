@@ -270,6 +270,36 @@ declare function discoverSkillFiles(paths: string[], options?: DiscoverOptions):
  */
 declare function applyFixes(original: string, firedRuleIds: Set<string>): string;
 
+/** A change is relevant when it could alter what the linter sees. */
+declare function isRelevantChange(filename: string | null): boolean;
+interface Debouncer {
+    trigger(): void;
+    cancel(): void;
+}
+/** Call `fn` once, `ms` after the last `trigger()`. */
+declare function createDebouncer(fn: () => void, ms?: number): Debouncer;
+/**
+ * The directories to watch for a given set of CLI paths.
+ *
+ * A file argument contributes its containing directory — watching a single file misses
+ * the atomic-rename pattern most editors use to save.
+ */
+declare function watchRoots(paths: string[], files: string[], cwd: string): string[];
+interface Watcher {
+    /** True when the platform supported a single recursive watch per root. */
+    recursive: boolean;
+    close(): void;
+}
+/**
+ * Watch `roots` and call `onChange` (debounced) when anything relevant changes.
+ *
+ * Unreadable or vanished directories are skipped rather than throwing: a watch root
+ * can disappear between discovery and registration.
+ */
+declare function createWatcher(roots: string[], onChange: () => void, options?: {
+    debounceMs?: number;
+}): Watcher;
+
 /** Rule IDs whose findings can be auto-fixed by rewriting the file. */
 declare const FIXABLE_RULES: readonly ["no-bom", "line-endings", "final-newline"];
 
@@ -322,4 +352,4 @@ declare function charLength(text: string): number;
  */
 declare const VERSION = "0.1.0";
 
-export { type ActiveSeverity, CLAUDE_CODE_KEYS, DEFAULT_IGNORE, DEFAULT_PRESET, type DiscoverResult, FIXABLE_RULES, FORMATS, type Finding, type Format, LIMITS, type LintResult, type LoadedConfig, NAME_PATTERN, OPEN_STANDARD_KEYS, type Options, PRESETS, type Preset, RULES, RULE_META, type ReportFn, type ReportOptions, type ResolveInput, type ResolvedOptions, type Rule, SET_RULES, SPEC_VERIFIED, type SetReportFn, type SetRule, type Severity, type SkillDoc, type SkillspecConfig, VERSION, applyFixes, charLength, compareFindings, discoverSkillFiles, estimateTokens, formatResult, githubSummary, lintDoc, lintFiles, lintSet, lintText, loadConfig, parseSkill, resolveOptions };
+export { type ActiveSeverity, CLAUDE_CODE_KEYS, DEFAULT_IGNORE, DEFAULT_PRESET, type DiscoverResult, FIXABLE_RULES, FORMATS, type Finding, type Format, LIMITS, type LintResult, type LoadedConfig, NAME_PATTERN, OPEN_STANDARD_KEYS, type Options, PRESETS, type Preset, RULES, RULE_META, type ReportFn, type ReportOptions, type ResolveInput, type ResolvedOptions, type Rule, SET_RULES, SPEC_VERIFIED, type SetReportFn, type SetRule, type Severity, type SkillDoc, type SkillspecConfig, VERSION, type Watcher, applyFixes, charLength, compareFindings, createDebouncer, createWatcher, discoverSkillFiles, estimateTokens, formatResult, githubSummary, isRelevantChange, lintDoc, lintFiles, lintSet, lintText, loadConfig, parseSkill, resolveOptions, watchRoots };

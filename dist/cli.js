@@ -1137,6 +1137,84 @@ function formatResult(format, result, options = {}) {
   }
 }
 
+// src/watch.ts
+import { watch } from "fs";
+import { dirname as dirname3, isAbsolute as isAbsolute2, join as join3 } from "path";
+var DEFAULT_DEBOUNCE_MS = 120;
+function isRelevantChange(filename) {
+  if (filename === null || filename === "") return true;
+  const base = filename.split(/[\\/]/).pop() ?? filename;
+  if (/^skill\.md$/i.test(base)) return true;
+  if (!base.includes(".")) return true;
+  return false;
+}
+function createDebouncer(fn, ms = DEFAULT_DEBOUNCE_MS) {
+  let timer;
+  return {
+    trigger() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = void 0;
+        fn();
+      }, ms);
+      timer.unref?.();
+    },
+    cancel() {
+      if (timer) clearTimeout(timer);
+      timer = void 0;
+    }
+  };
+}
+function watchRoots(paths, files, cwd) {
+  const roots = /* @__PURE__ */ new Set();
+  const abs = (p) => isAbsolute2(p) ? p : join3(cwd, p);
+  if (paths.length === 0) {
+    roots.add(cwd);
+  } else {
+    for (const p of paths) {
+      const full = abs(p);
+      roots.add(/\.md$/i.test(full) ? dirname3(full) : full);
+    }
+  }
+  for (const file of files) roots.add(dirname3(abs(file)));
+  return [...roots].sort();
+}
+function createWatcher(roots, onChange, options = {}) {
+  const debounced = createDebouncer(onChange, options.debounceMs ?? DEFAULT_DEBOUNCE_MS);
+  const watchers = [];
+  let recursive = true;
+  const add = (dir, useRecursive) => {
+    try {
+      const w = watch(dir, { recursive: useRecursive }, (_event, filename) => {
+        if (isRelevantChange(typeof filename === "string" ? filename : null)) debounced.trigger();
+      });
+      w.on("error", () => void 0);
+      watchers.push(w);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  for (const root of roots) {
+    if (recursive && add(root, true)) continue;
+    recursive = false;
+    add(root, false);
+  }
+  return {
+    recursive,
+    close() {
+      debounced.cancel();
+      for (const w of watchers) {
+        try {
+          w.close();
+        } catch {
+        }
+      }
+      watchers.length = 0;
+    }
+  };
+}
+
 // src/cli.ts
 process2.stdout.on("error", (err) => {
   if (err.code === "EPIPE") process2.exit(0);
@@ -1158,6 +1236,7 @@ Options:
       --preset <name>   Spec preset: claude-code (default) or standard.
       --config <path>   Use a specific config file.
       --fix             Apply mechanical fixes (BOM, CRLF, final newline) in place.
+  -w, --watch           Re-lint on change and keep running (Ctrl-C to stop).
       --rule <id:sev>   Override a rule severity (error|warning|off). Repeatable.
       --max-warnings <n> Fail if warnings exceed n (default: -1, never).
       --quiet           Report errors only; ignore warnings.
@@ -1182,6 +1261,7 @@ function parseArgs(argv) {
   const args = {
     paths: [],
     fix: false,
+    watch: false,
     quiet: false,
     maxWarnings: -1,
     ruleOverrides: {},
@@ -1235,6 +1315,10 @@ function parseArgs(argv) {
         break;
       case "--fix":
         args.fix = true;
+        break;
+      case "-w":
+      case "--watch":
+        args.watch = true;
         break;
       case "--quiet":
         args.quiet = true;
@@ -1335,25 +1419,66 @@ function main() {
   };
   const inActions = process2.env.GITHUB_ACTIONS === "true";
   const format = args.format ?? (inActions ? "github" : "pretty");
-  if (args.fix) {
-    const fixedFiles = runFixes(args.paths, options);
-    if (fixedFiles > 0 && format === "pretty") {
-      process2.stdout.write(`skillspec: applied fixes to ${fixedFiles} file(s)
+  const color = args.color ?? (format === "pretty" && Boolean(process2.stdout.isTTY) && !process2.env.NO_COLOR);
+  const runOnce = () => {
+    if (args.fix) {
+      const fixedFiles = runFixes(args.paths, options);
+      if (fixedFiles > 0 && format === "pretty") {
+        process2.stdout.write(`skillspec: applied fixes to ${fixedFiles} file(s)
 
 `);
+      }
     }
-  }
-  let result = lintFiles(args.paths, options);
-  const realWarningCount = result.warningCount;
-  if (args.quiet) {
-    const findings = result.findings.filter((f) => f.severity === "error");
-    result = { ...result, findings, warningCount: 0 };
-  }
-  const color = args.color ?? (format === "pretty" && Boolean(process2.stdout.isTTY) && !process2.env.NO_COLOR);
-  const output = formatResult(format, result, { color });
-  if (output) process2.stdout.write(`${output}
+    let result = lintFiles(args.paths, options);
+    const realWarningCount = result.warningCount;
+    if (args.quiet) {
+      const findings = result.findings.filter((f) => f.severity === "error");
+      result = { ...result, findings, warningCount: 0 };
+    }
+    const output = formatResult(format, result, { color });
+    if (output) process2.stdout.write(`${output}
 `);
-  const overWarnings = args.maxWarnings >= 0 && realWarningCount > args.maxWarnings;
-  process2.exit(result.errorCount > 0 || overWarnings ? 1 : 0);
+    const overWarnings = args.maxWarnings >= 0 && realWarningCount > args.maxWarnings;
+    return result.errorCount === 0 && !overWarnings;
+  };
+  if (!args.watch) {
+    process2.exit(runOnce() ? 0 : 1);
+  }
+  runWatch(args, options, runOnce, format, color);
+}
+function runWatch(args, options, runOnce, format, color) {
+  const interactive = format === "pretty" && Boolean(process2.stdout.isTTY);
+  const dim = (text) => color ? `\x1B[2m${text}\x1B[0m` : text;
+  let watcher;
+  let running = false;
+  const pass = () => {
+    if (running) return;
+    running = true;
+    try {
+      if (interactive) process2.stdout.write("\x1B[2J\x1B[H");
+      runOnce();
+      const resolved = resolveOptions(options);
+      const { files } = discoverSkillFiles(args.paths, {
+        ignore: resolved.ignore,
+        cwd: process2.cwd()
+      });
+      watcher?.close();
+      watcher = createWatcher(watchRoots(args.paths, files, process2.cwd()), pass);
+      const scope = watcher.recursive ? `${files.length} skill(s)` : `${files.length} skill(s), ${"non-recursive watch \u2014 a brand new skill folder is picked up on the next change"}`;
+      process2.stdout.write(dim(`
+watching ${scope} \xB7 Ctrl-C to stop
+`));
+    } finally {
+      running = false;
+    }
+  };
+  const stop = () => {
+    watcher?.close();
+    process2.stdout.write("\n");
+    process2.exit(0);
+  };
+  process2.on("SIGINT", stop);
+  process2.on("SIGTERM", stop);
+  pass();
 }
 main();

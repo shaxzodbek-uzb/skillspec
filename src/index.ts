@@ -11,6 +11,13 @@ export { resolveOptions, DEFAULT_IGNORE, type ResolveInput } from './options.js'
 export { loadConfig, type SkillspecConfig, type LoadedConfig } from './config.js';
 export { discoverSkillFiles, type DiscoverResult } from './discover.js';
 export { applyFixes } from './fix.js';
+export {
+  createWatcher,
+  watchRoots,
+  isRelevantChange,
+  createDebouncer,
+  type Watcher,
+} from './watch.js';
 export { RULES, SET_RULES, RULE_META, FIXABLE_RULES } from './rules/index.js';
 export {
   formatResult,

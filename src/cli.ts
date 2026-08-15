@@ -8,6 +8,9 @@ import { applyFixes } from './fix.js';
 import { FIXABLE_RULES, RULE_META } from './rules/index.js';
 import { formatResult, FORMATS, type Format } from './reporters/index.js';
 import { VERSION } from './version.js';
+import { discoverSkillFiles } from './discover.js';
+import { resolveOptions } from './options.js';
+import { createWatcher, watchRoots } from './watch.js';
 import { SPEC_VERIFIED } from './spec.js';
 import type { Preset } from './spec.js';
 
@@ -24,6 +27,7 @@ interface CliArgs {
   preset?: Preset;
   config?: string;
   fix: boolean;
+  watch: boolean;
   quiet: boolean;
   color?: boolean;
   maxWarnings: number;
@@ -49,6 +53,7 @@ Options:
       --preset <name>   Spec preset: claude-code (default) or standard.
       --config <path>   Use a specific config file.
       --fix             Apply mechanical fixes (BOM, CRLF, final newline) in place.
+  -w, --watch           Re-lint on change and keep running (Ctrl-C to stop).
       --rule <id:sev>   Override a rule severity (error|warning|off). Repeatable.
       --max-warnings <n> Fail if warnings exceed n (default: -1, never).
       --quiet           Report errors only; ignore warnings.
@@ -75,6 +80,7 @@ function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     paths: [],
     fix: false,
+    watch: false,
     quiet: false,
     maxWarnings: -1,
     ruleOverrides: {},
@@ -130,6 +136,10 @@ function parseArgs(argv: string[]): CliArgs {
         break;
       case '--fix':
         args.fix = true;
+        break;
+      case '-w':
+      case '--watch':
+        args.watch = true;
         break;
       case '--quiet':
         args.quiet = true;
@@ -233,30 +243,96 @@ function main(): void {
 
   const inActions = process.env.GITHUB_ACTIONS === 'true';
   const format: Format = args.format ?? (inActions ? 'github' : 'pretty');
-
-  if (args.fix) {
-    const fixedFiles = runFixes(args.paths, options);
-    if (fixedFiles > 0 && format === 'pretty') {
-      process.stdout.write(`skillspec: applied fixes to ${fixedFiles} file(s)\n\n`);
-    }
-  }
-
-  let result = lintFiles(args.paths, options);
-  // The warning gate uses the real count, independent of the --quiet display
-  // filter, so `--quiet --max-warnings 0` can't silently pass in CI.
-  const realWarningCount = result.warningCount;
-  if (args.quiet) {
-    const findings = result.findings.filter((f) => f.severity === 'error');
-    result = { ...result, findings, warningCount: 0 };
-  }
-
   const color =
     args.color ?? (format === 'pretty' && Boolean(process.stdout.isTTY) && !process.env.NO_COLOR);
-  const output = formatResult(format, result, { color });
-  if (output) process.stdout.write(`${output}\n`);
 
-  const overWarnings = args.maxWarnings >= 0 && realWarningCount > args.maxWarnings;
-  process.exit(result.errorCount > 0 || overWarnings ? 1 : 0);
+  /** One lint pass: fix (if asked), lint, print. Returns true when the run is clean. */
+  const runOnce = (): boolean => {
+    if (args.fix) {
+      const fixedFiles = runFixes(args.paths, options);
+      if (fixedFiles > 0 && format === 'pretty') {
+        process.stdout.write(`skillspec: applied fixes to ${fixedFiles} file(s)\n\n`);
+      }
+    }
+
+    let result = lintFiles(args.paths, options);
+    // The warning gate uses the real count, independent of the --quiet display
+    // filter, so `--quiet --max-warnings 0` can't silently pass in CI.
+    const realWarningCount = result.warningCount;
+    if (args.quiet) {
+      const findings = result.findings.filter((f) => f.severity === 'error');
+      result = { ...result, findings, warningCount: 0 };
+    }
+
+    const output = formatResult(format, result, { color });
+    if (output) process.stdout.write(`${output}\n`);
+
+    const overWarnings = args.maxWarnings >= 0 && realWarningCount > args.maxWarnings;
+    return result.errorCount === 0 && !overWarnings;
+  };
+
+  if (!args.watch) {
+    process.exit(runOnce() ? 0 : 1);
+  }
+
+  runWatch(args, options, runOnce, format, color);
+}
+
+/**
+ * Watch mode. Never exits on findings — that is the point — so the exit code is
+ * meaningless here and CI should use the one-shot form.
+ */
+function runWatch(
+  args: CliArgs,
+  options: Options & { preset?: Preset },
+  runOnce: () => boolean,
+  format: Format,
+  color: boolean,
+): void {
+  const interactive = format === 'pretty' && Boolean(process.stdout.isTTY);
+  const dim = (text: string): string => (color ? `\u001b[2m${text}\u001b[0m` : text);
+  let watcher: ReturnType<typeof createWatcher> | undefined;
+  let running = false;
+
+  const pass = (): void => {
+    if (running) return; // a change during a run is picked up by the next trigger
+    running = true;
+    try {
+      // Clearing only in an interactive terminal: doing it when output is piped
+      // would inject escape codes into a log.
+      if (interactive) process.stdout.write('\u001b[2J\u001b[H');
+      runOnce();
+
+      // Re-register every pass so a skill directory created since the last run is
+      // watched — and so a root that vanished stops erroring.
+      const resolved = resolveOptions(options);
+      const { files } = discoverSkillFiles(args.paths, {
+        ignore: resolved.ignore,
+        cwd: process.cwd(),
+      });
+      watcher?.close();
+      watcher = createWatcher(watchRoots(args.paths, files, process.cwd()), pass);
+
+      const scope = watcher.recursive
+        ? `${files.length} skill(s)`
+        : `${files.length} skill(s), ${
+            'non-recursive watch — a brand new skill folder ' + 'is picked up on the next change'
+          }`;
+      process.stdout.write(dim(`\nwatching ${scope} · Ctrl-C to stop\n`));
+    } finally {
+      running = false;
+    }
+  };
+
+  const stop = (): void => {
+    watcher?.close();
+    process.stdout.write('\n');
+    process.exit(0);
+  };
+  process.on('SIGINT', stop);
+  process.on('SIGTERM', stop);
+
+  pass();
 }
 
 main();
