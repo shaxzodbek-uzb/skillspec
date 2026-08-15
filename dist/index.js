@@ -969,6 +969,84 @@ function applyFixes(original, firedRuleIds) {
   return out;
 }
 
+// src/watch.ts
+import { watch } from "fs";
+import { dirname as dirname3, isAbsolute as isAbsolute2, join as join3 } from "path";
+var DEFAULT_DEBOUNCE_MS = 120;
+function isRelevantChange(filename) {
+  if (filename === null || filename === "") return true;
+  const base = filename.split(/[\\/]/).pop() ?? filename;
+  if (/^skill\.md$/i.test(base)) return true;
+  if (!base.includes(".")) return true;
+  return false;
+}
+function createDebouncer(fn, ms = DEFAULT_DEBOUNCE_MS) {
+  let timer;
+  return {
+    trigger() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = void 0;
+        fn();
+      }, ms);
+      timer.unref?.();
+    },
+    cancel() {
+      if (timer) clearTimeout(timer);
+      timer = void 0;
+    }
+  };
+}
+function watchRoots(paths, files, cwd) {
+  const roots = /* @__PURE__ */ new Set();
+  const abs = (p) => isAbsolute2(p) ? p : join3(cwd, p);
+  if (paths.length === 0) {
+    roots.add(cwd);
+  } else {
+    for (const p of paths) {
+      const full = abs(p);
+      roots.add(/\.md$/i.test(full) ? dirname3(full) : full);
+    }
+  }
+  for (const file of files) roots.add(dirname3(abs(file)));
+  return [...roots].sort();
+}
+function createWatcher(roots, onChange, options = {}) {
+  const debounced = createDebouncer(onChange, options.debounceMs ?? DEFAULT_DEBOUNCE_MS);
+  const watchers = [];
+  let recursive = true;
+  const add = (dir, useRecursive) => {
+    try {
+      const w = watch(dir, { recursive: useRecursive }, (_event, filename) => {
+        if (isRelevantChange(typeof filename === "string" ? filename : null)) debounced.trigger();
+      });
+      w.on("error", () => void 0);
+      watchers.push(w);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  for (const root of roots) {
+    if (recursive && add(root, true)) continue;
+    recursive = false;
+    add(root, false);
+  }
+  return {
+    recursive,
+    close() {
+      debounced.cancel();
+      for (const w of watchers) {
+        try {
+          w.close();
+        } catch {
+        }
+      }
+      watchers.length = 0;
+    }
+  };
+}
+
 // src/reporters/pretty.ts
 function colors(enabled) {
   const wrap = (code) => (s) => enabled ? `\x1B[${code}m${s}\x1B[0m` : s;
@@ -1178,15 +1256,19 @@ export {
   applyFixes,
   charLength,
   compareFindings,
+  createDebouncer,
+  createWatcher,
   discoverSkillFiles,
   estimateTokens,
   formatResult,
   githubSummary,
+  isRelevantChange,
   lintDoc,
   lintFiles,
   lintSet,
   lintText,
   loadConfig,
   parseSkill,
-  resolveOptions
+  resolveOptions,
+  watchRoots
 };

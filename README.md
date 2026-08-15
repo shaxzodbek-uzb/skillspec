@@ -30,7 +30,7 @@ skills/pdf-tools/SKILL.md
 ✖ 4 problems (2 errors, 2 warnings) across 1 skill
 ```
 
-Exit code `0` when clean, `1` when problems are found, `2` on a usage error — ready for a pre‑commit hook or CI gate.
+Exit code `0` when clean, `1` when problems are found, `2` on a usage error — ready for a pre‑commit hook or CI gate. While you're _writing_ a skill, [`--watch`](#watch-mode) re-lints on every save.
 
 ---
 
@@ -41,6 +41,7 @@ There are several skill linters now. `skillspec` is opinionated about three thin
 - **Spec fidelity.** Every limit comes straight from Anthropic's docs and the [Agent Skills standard](https://agentskills.io/specification): `name` ≤ 64 chars with the exact charset and the reserved‑word ban (`anthropic`/`claude`), `description` 1–1024 chars with no XML tags, the ~5,000‑token Level‑2 body budget, `name` must equal the directory. The encoded spec is dated and version‑tracked (`skillspec --rules` shows the verification date).
 - **Discoverability, not just validity.** A schema‑valid skill can still be undiscoverable. `skillspec` flags descriptions that state _what_ but not _when_, first/second‑person phrasing (the description is injected into the system prompt), thin descriptions, and **trigger collisions** — two skills whose descriptions overlap so much Claude can't tell them apart.
 - **Frictionless CI.** Truly zero‑config, stable machine‑readable rule IDs, a first‑class GitHub Action that posts inline PR annotations and a job summary, SARIF output for the Security tab, and `--fix` for the mechanical stuff.
+- **A tight authoring loop.** `--watch` re-lints on save, so the description you're iterating on is checked as you write it rather than after you push.
 
 ---
 
@@ -76,6 +77,38 @@ Run `skillspec --rules` for the live list. Defaults:
 | `trigger-collision`        | warning | No two descriptions overlap enough to confuse Claude                 |
 
 ¹ `name-required` is an **error** under the `standard` preset and a **warning** under `claude-code` (where `name` defaults to the directory name).
+
+---
+
+## Watch mode
+
+Writing a skill is a loop: edit the description, re-run the linter, see if the trigger cue
+landed. `--watch` closes it.
+
+```bash
+skillspec --watch                      # re-lint on every change
+skillspec .claude/skills --watch --fix # and fix the mechanical things as you go
+```
+
+```console
+✓ skillspec: 1 skill checked, no problems found.
+
+watching 1 skill(s) · Ctrl-C to stop
+```
+
+The screen is cleared between passes only in an interactive terminal, so piping still
+produces clean output. Changes are debounced — editors write a file in several steps —
+and each pass re-discovers skills, so a new skill directory starts being linted without a
+restart.
+
+Watch mode **never exits on findings**; that's the point. Use the one-shot form in CI,
+where the exit code is what matters.
+
+> **One platform caveat, stated plainly.** Recursive watching isn't available everywhere
+> Node 18 runs (Linux only gained it in Node 20.13). skillspec probes for it and falls
+> back to watching each skill directory individually, printing which mode it's in. In the
+> fallback, a _brand new_ skill folder is picked up on the next change rather than
+> immediately.
 
 ---
 
