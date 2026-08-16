@@ -350,6 +350,6 @@ declare function charLength(text: string): number;
  * Package version. Kept in sync with package.json by a unit test
  * (see test/version.test.ts) so the two never drift.
  */
-declare const VERSION = "0.1.0";
+declare const VERSION = "0.2.0";
 
 export { type ActiveSeverity, CLAUDE_CODE_KEYS, DEFAULT_IGNORE, DEFAULT_PRESET, type DiscoverResult, FIXABLE_RULES, FORMATS, type Finding, type Format, LIMITS, type LintResult, type LoadedConfig, NAME_PATTERN, OPEN_STANDARD_KEYS, type Options, PRESETS, type Preset, RULES, RULE_META, type ReportFn, type ReportOptions, type ResolveInput, type ResolvedOptions, type Rule, SET_RULES, SPEC_VERIFIED, type SetReportFn, type SetRule, type Severity, type SkillDoc, type SkillspecConfig, VERSION, type Watcher, applyFixes, charLength, compareFindings, createDebouncer, createWatcher, discoverSkillFiles, estimateTokens, formatResult, githubSummary, isRelevantChange, lintDoc, lintFiles, lintSet, lintText, loadConfig, parseSkill, resolveOptions, watchRoots };

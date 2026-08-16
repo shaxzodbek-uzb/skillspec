@@ -1,6 +1,6 @@
 {
   "name": "skillspec",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lint Claude Agent SKILL.md files against Anthropic's exact spec — frontmatter, naming, description trigger-quality, and token budgets — in your editor, on the CLI, and in CI. Zero-config.",
   "keywords": [
     "claude",

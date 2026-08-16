@@ -153,8 +153,18 @@ describe('createWatcher', () => {
       { debounceMs: 20 },
     );
 
-    writeFileSync(file, 'two');
-    await vi.waitFor(() => expect(calls).toBeGreaterThan(0), { timeout: 3000 });
+    // Keep writing until the callback fires. fs.watch does not guarantee the
+    // watch is armed by the time createWatcher returns — on macOS a recursive
+    // watch goes through FSEvents and takes a moment to register — so a single
+    // write here races the watcher and is sometimes missed.
+    let n = 0;
+    await vi.waitFor(
+      () => {
+        writeFileSync(file, `two-${n++}`);
+        expect(calls).toBeGreaterThan(0);
+      },
+      { timeout: 3000, interval: 50 },
+    );
   });
 
   it('reports whether the platform gave it a recursive watch', () => {
