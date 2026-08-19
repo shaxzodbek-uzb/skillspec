@@ -16,6 +16,10 @@ npx skillspec
 
 No config, no init. It finds every `SKILL.md` under the current directory and tells you exactly what's wrong and where.
 
+<p align="center">
+  <img src="docs/demo.svg" alt="skillspec reporting a spec violation and two warnings in a SKILL.md" width="860">
+</p>
+
 ---
 
 ## Example
